@@ -1,0 +1,9 @@
+name: controle-carros
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - streamlit>=1.36,<2.0
+      - pymongo>=4.7,<5.0
