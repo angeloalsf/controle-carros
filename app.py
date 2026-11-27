@@ -1,3 +1,4 @@
+import re
 from datetime import date
 import streamlit as st
 from bson import ObjectId
@@ -316,19 +317,25 @@ with tab_buscas:
         marcas = sorted([x for x in carros.distinct("marca") if x])
         marca = st.selectbox("Marca", marcas) if marcas else None
         if st.button("Pesquisar", key="search_brand") and marca:
-            st.dataframe(list(carros.find({"marca": {"$regex": f"^{marca}$", "$options": "i"}},
+            st.dataframe(list(carros.find({"marca": {"$regex": f"^{re.escape(marca)}$", "$options": "i"}},
                 {"_id": 0, "marca": 1, "modelo": 1, "ano": 1, "placa": 1})), use_container_width=True)
     elif search_type.startswith("3."):
         ano = st.number_input("Mostrar veículos fabricados a partir de:", min_value=1900, max_value=2100, value=2020)
         if st.button("Pesquisar", key="search_year"):
-            results = list(carros.find({"ano": {"$gte": int(ano)}}, {"_id": 0, "marca": 1, "modelo": 1, "ano": 1, "placa": 1}))
-            st.dataframe(results, use_container_width=True) if results else st.info("Nenhum veículo encontrado.")
+            results = list(carros.find({"ano": {"$gte": int(ano)}}, {"_id": 0, "marca": 1, "modelo": 1, "ano": 1, "placa": 1}).sort("ano", 1))
+            if results:
+                st.dataframe(results, use_container_width=True, hide_index=True)
+            else:
+                st.info("Nenhum veículo encontrado.")
     elif search_type.startswith("4."):
         owners = owner_options()
         owner = st.selectbox("Proprietário", owners, format_func=owner_label) if owners else None
         if st.button("Pesquisar", key="search_owner") and owner:
             results = list(carros.find({"proprietario_id": owner["_id"]}, {"_id": 0, "marca": 1, "modelo": 1, "ano": 1, "placa": 1}))
-            st.dataframe(results, use_container_width=True) if results else st.info("Esse proprietário não possui veículos cadastrados.")
+            if results:
+                st.dataframe(results, use_container_width=True, hide_index=True)
+            else:
+                st.info("Esse proprietário não possui veículos cadastrados.")
     elif search_type.startswith("5."):
         cars = car_options()
         car = st.selectbox("Veículo", cars, format_func=car_label) if cars else None
@@ -346,13 +353,17 @@ with tab_buscas:
             {"$lookup": {"from": "carros", "localField": "_id", "foreignField": "_id", "as": "carro"}},
             {"$unwind": {"path": "$carro", "preserveNullAndEmptyArrays": True}},
             {"$project": {"_id": 0, "placa": "$carro.placa", "marca": "$carro.marca",
-                "modelo": "$carro.modelo", "quantidade_manutencoes": "$quantidade", "total_gasto": 1}}
+                "modelo": "$carro.modelo", "quantidade_manutencoes": "$quantidade", "total_gasto": 1}},
+            {"$sort": {"total_gasto": -1}}
         ]
         if st.button("Executar agregação", key="search_cost"):
             results = list(manutencoes.aggregate(pipeline))
-            st.dataframe([{"Placa": x.get("placa", "—"), "Veículo": f'{x.get("marca", "")} {x.get("modelo", "")}',
-                "Manutenções": x.get("quantidade_manutencoes"), "Total gasto": money(x.get("total_gasto", 0))}
-                for x in results], use_container_width=True) if results else st.info("Ainda não existem manutenções registradas.")
+            if results:
+                st.dataframe([{"Placa": x.get("placa", "—"), "Veículo": f'{x.get("marca", "")} {x.get("modelo", "")}'.strip() or "Veículo removido",
+                    "Manutenções": x.get("quantidade_manutencoes"), "Total gasto": money(x.get("total_gasto", 0))}
+                    for x in results], use_container_width=True, hide_index=True)
+            else:
+                st.info("Ainda não existem manutenções registradas.")
 
 st.divider()
 st.caption("Trabalho acadêmico — Tópicos Especiais em Banco de Dados | MongoDB")
